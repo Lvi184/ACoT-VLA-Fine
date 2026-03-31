@@ -69,7 +69,7 @@ class AssetsConfig:
 @dataclasses.dataclass(frozen=True)
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
-    repo_id: str | None = None
+    repo_id: str | Sequence[str] | None = None
     # Directory within the assets directory containing the data assets.
     asset_id: str | None = None
     # Contains precomputed normalization stats. If None, normalization will not be performed.
@@ -190,7 +190,7 @@ class ModelTransformFactory(GroupFactory):
 @dataclasses.dataclass(frozen=True)
 class DataConfigFactory(abc.ABC):
     # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
+    repo_id: str | Sequence[str] = tyro.MISSING
     # Determines how the assets will be loaded.
     assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
     # Base config that will be updated by the factory.
@@ -1818,27 +1818,31 @@ _CONFIGS = [
         # For the ICRA sim challenge, we set both coarse and fine action horizons to 30 since the tasks are relatively long-horizon.
         # We also use both explicit and implicit action reasoners, and use the downsample-based implicit extractor.
         # You can modify these design choices based on the specific tasks and dataset. 
-        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
+        model=acot_vla.ACOTConfig(coarse_action_horizon=15, action_horizon=10, paligemma_variant="gemma_2b_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
         data=LerobotACOTGo2DataConfig(
-            default_prompt = "This is the icra simulation challenge baseline config. Please refer to the README for details.",
+            default_prompt = "Fine-tuning on low-score ICRA tasks with optimized config.",
             # Fill in the 9 tasks for training. You can use all 9 tasks, or a subset of them based on your preference.
             repo_id = [
-                "/mnt/public/E6/lerobot/7819/task_5833", # Pouring workpieces, single-arm task, uses right hand only
-                "/mnt/public/E6/lerobot/7820/task_5832", # Opening a door, single-arm task, uses right hand only
-                "/mnt/public/E6/lerobot/8153", # Scooping popcorn, single-arm task, uses right hand only
-                "/mnt/public/E6/lerobot/7821/task_5829", # Carrying a pot, dual-arm task, uses both hands simultaneously
-
-                "/mnt/public/E6/lerobot/7837/task_5441", # Grabbing toys, dual-arm task, uses left or right hand based on instruction
-                "/mnt/public/E6/lerobot/7944/task_6100", # Supermarket item retrieval, dual-arm task, uses left or right hand based on instruction
-                "/mnt/public/E6/lerobot/7818/task_5853", # Supermarket restocking, dual-arm task, uses left or right hand based on instruction
-                "/mnt/public/E6/lerobot/8169/2026021101/gripper/task_6167", # packages sorting, grasps objects based on instruction, single-arm task but involves waist movement
-
-                "/mnt/public/E6/lerobot/7878//task_5828", # Arranging the table, dual-arm task, uses both hands simultaneously
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/open_door",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/place_block_into_box",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/hold_pot",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/pour_workpiece",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/take_wrong_item_shelf",
             ],
             # Set the asset dir to specify normalization stats calculated from the dataset
             assets=AssetsConfig(
                 assets_dir=None,
-                asset_id="/mnt/public/zhonglinqing/data/datasets/genie_sim_icra_datasets/nine_dataset_merge_assets",
+                asset_id="/root/gpufree-data/ACoT-VLA/assets/finetune_low_score",
             ),
             # this line defines a mapping from task name to (prompt, probability of replacement) for training. 
             # If the current episode's task name matches one of the keys in the mapping, then with the corresponding probability, 
@@ -1846,26 +1850,26 @@ _CONFIGS = [
             # This allows for more diverse and potentially more informative prompts during training.
             prompt_map_inject_to_training = {
                 # task name: (prompt to replace vanilla annotation, probability to replace)
-                "Unload workpiece_icra_SIM": ("Pour the workpiece into the box", 0.5),
-                "Turn the doorknob": ("Turn the doorknob and push the door", 0.5),
-                "Make popcorn": ("Scoop the popcorn and pour it into the popcorn bucket", 0.5),
-                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.5),
+                "Unload workpiece_icra_SIM": ("Pour the workpiece into the box", 0.8),
+                "Turn the doorknob": ("Turn the doorknob and push the door open", 0.8),
+                "Make popcorn": ("Scoop the popcorn and pour it into the popcorn bucket", 0.8),
+                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.8),
 
                 "Insert building block holes_2_SIM": (
                     "Pick up the yellow circular block from the table, "
                     "and place it into the round hole of the block box",
-                    0.2
+                    0.8
                 ),
                 "Remove misplaced beverages from shelves": (
                     "Pick up the incorrectly placed item from the shelf, "
                     "and place it into the shopping basket",
-                    0.2
+                    0.8
                 ),
                 "Stock supermarket shelves  \nStraighten products  \nAttend ICRA conference  \nOperate SIM card": (
                     "Pick up the wei-chuan orange juice in the shopping basket, "
                     "and place it on the shelf. "
                     "Then, straighten the toppled wei-chuan grape juice",
-                    0.2
+                    0.8
                 ),
                 "Sort packages": (
                     "Grab the <color> package on the table, "
@@ -1874,7 +1878,7 @@ _CONFIGS = [
                     "Then, grab the package, "
                     "rotate the waist and place the package in the blue bin. "
                     "Finally, return the waist back to face the initial table",
-                    0.2
+                    0.8
                 ),
 
                 "Clear the desktop": (
@@ -1883,7 +1887,7 @@ _CONFIGS = [
                     "pick up the tissue on the table and place it into the trash bin on the right size. "
                     "Then, pick up the mouse and place it on the right side of the laptop. "
                     "Finally, straighten the colored pencil box",
-                    0.5
+                    0.8
                 ),
             },
             repack_transforms =_transforms.Group(
@@ -1918,23 +1922,23 @@ _CONFIGS = [
             delta_action_mask = _transforms.make_bool_mask(14, -18)
         ),
         lr_schedule = _optimizer.CosineDecaySchedule(
-            warmup_steps = 10_000,
-            peak_lr = 5e-5,
-            decay_steps = 1_000_000,
-            decay_lr = 5e-5,
+            warmup_steps = 1_000,
+            peak_lr = 3e-5,
+            decay_steps = 50_000,
+            decay_lr = 3e-6,
         ),
         optimizer = _optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay = 0.999,
         weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
-            "/mnt/public/zhonglinqing/pkgs/pi05_model/params"
+            "/root/gpufree-data/ACoT-VLA/checkpoints/baseline/30000/params"
         ),
-        num_train_steps = 50_000,
-        save_interval = 5000 if not os.getenv("DEBUG_MODE", default=False) == "true" else 200,
-        num_workers = 24 if not os.getenv("DEBUG_MODE", default=False) == "true" else 1,
-        batch_size = 256 if not os.getenv("DEBUG_MODE", default=False) == "true" else 16,
+        num_train_steps = 10_000,
+        save_interval = 2000 if not os.getenv("DEBUG_MODE", default=False) == "true" else 200,
+        num_workers = 4 if not os.getenv("DEBUG_MODE", default=False) == "true" else 1,
+        batch_size = 2 if not os.getenv("DEBUG_MODE", default=False) == "true" else 1,
         # You can select to freeze certain parts of the model during training by setting the corresponding flags to True
         freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
-            freeze_vision = False, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False]
+            freeze_vision = True, freeze_llm = True, freeze_llm_embedder=False, freeze_dual_ae=[False, False], freeze_lora=False
         )
     )
 ]

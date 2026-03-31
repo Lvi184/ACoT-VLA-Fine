@@ -330,7 +330,7 @@ class ACOTConfig(_model.BaseModelConfig):
         return observation_spec, action_spec
 
 
-    def get_freeze_filter(self, freeze_llm = False, freeze_llm_embedder = True, freeze_vision = False, freeze_dual_ae = [False, False]) -> nnx.filterlib.Filter:
+    def get_freeze_filter(self, freeze_llm = False, freeze_llm_embedder = True, freeze_vision = False, freeze_dual_ae = [False, False], freeze_lora = False) -> nnx.filterlib.Filter:
         gemma_params_filter = nnx_utils.PathRegex(".*llm.*")
         paligemma_base_filter = nnx_utils.PathRegex(".*llm(?!.*_1|.*_2).*") 
         coarse_action_expert_params_filter = nnx_utils.PathRegex(".*llm.*_1.*")
@@ -358,7 +358,7 @@ class ACOTConfig(_model.BaseModelConfig):
         keep_alive_paths = []
 
         has_lora = "lora" in self.paligemma_variant or "lora" in self.action_expert_variant
-        if has_lora:
+        if has_lora and not freeze_lora:
             keep_alive_paths.append(lora_filter)
 
         if freeze_llm and not freeze_llm_embedder:
