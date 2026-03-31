@@ -512,24 +512,7 @@ def _collate_fn(items):
     # Make sure to convert to numpy arrays before stacking since some of the incoming elements
     # may be JAX arrays.
     filter_items = [x for x in items if x is not None]
-    # return jax.tree.map(lambda *x: np.stack(np.asarray(x), axis=0), *filter_items)
-
-    def debug_stack(*args):
-        arrays = [np.asarray(x) for x in args]
-        try:
-            return np.stack(arrays, axis=0)
-        except ValueError as e:
-            shapes = [x.shape for x in arrays]
-            unique_shapes = set(shapes)
-            print(f"\n======== DEBUG ERROR ========")
-            print(f"Stacking failed!")
-            print(f"Found varying shapes: {unique_shapes}")
-            print(f"First 5 shapes: {shapes[:5]}")
-            print(f"Sample data (first item): {arrays[0]}")
-            print(f"=============================\n")
-            raise e
-
-    return jax.tree.map(debug_stack, *filter_items)
+    return jax.tree.map(lambda *x: np.stack(np.asarray(x), axis=0), *filter_items)
 
 
 def _worker_init_fn(worker_id: int) -> None:

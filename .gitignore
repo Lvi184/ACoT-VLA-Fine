@@ -170,3 +170,18 @@ cython_debug/
 logs/
 *exps*
 .vscode/
+
+# Binary tools
+ffmpeg-*/
+ffmpeg.tar.xz
+uv-*/
+uv.tar.gz
+
+# Backup files
+*.bak
+
+# Logs
+log/
+
+# Stats
+norm_stats.json
