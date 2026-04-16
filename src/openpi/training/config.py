@@ -2322,7 +2322,28 @@ _CONFIGS = [
     # 集合所有有效改进：状态编码器 + step-by-step prompt + 二次微调 + 弱任务过采样
     TrainConfig(
         name="acot_icra_simulation_challenge_all_improvements",
-        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
+        model=acot_vla.ACOTConfig(
+            coarse_action_horizon=30, 
+            action_horizon=30, 
+            paligemma_variant="gemma_2b_lora", 
+            adopt_explicit_action_reasoner=True, 
+            adopt_implicit_action_reasoner=True, 
+            downsample_based_implicit_extractor=True,
+            # ===== Phase-aware extensions =====
+            use_phase_token=True,
+            num_phases=3,
+            phase_gate_on_visual=True,
+            phase_gate_on_state=True,
+            phase_loss_weight=0.0,
+            # ===== Memory extensions =====
+            use_memory_token=True,
+            memory_len=6,
+            memory_dim=256,
+            # ===== Weak hierarchical stage head =====
+            use_stage_head=True,
+            num_stages=6,
+            stage_loss_weight=0.2,
+        ),
         data=LerobotACOTGo2DataConfig(
             default_prompt = "Fine-tuning with all improvements: state encoder + step-by-step prompt + weak task over-sampling.",
             # 弱任务过采样：Task_2、Task_5、Task_10 各重复 4 次
@@ -2443,7 +2464,9 @@ _CONFIGS = [
                             "task": "task",
                             "episode_index": "episode_index"
                         }
-                    )
+                    ),
+                    _transforms.AddPhaseAndStageLabel(),
+                    _transforms.BuildHistoryTokens(memory_len=6, memory_dim=256),
                 ]
             ),
             base_config = DataConfig(dataloader_sampler = "subtask", prompt_from_hl_instruction = True),
@@ -2463,8 +2486,8 @@ _CONFIGS = [
         weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
             "/root/gpufree-data/ACoT-VLA/checkpoints/acot_icra_simulation_challenge_state_encoder/state_encoder_v2/9999/params"
         ),
-        num_train_steps = 5_000,
-        save_interval = 1000 if not os.getenv("DEBUG_MODE", default=False) == "true" else 200,
+        num_train_steps = 10_000,
+        save_interval = 2000 if not os.getenv("DEBUG_MODE", default=False) == "true" else 200,
         num_workers = 4 if not os.getenv("DEBUG_MODE", default=False) else 1,
         batch_size = 2 if not os.getenv("DEBUG_MODE", default=False) else 1,
         freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(

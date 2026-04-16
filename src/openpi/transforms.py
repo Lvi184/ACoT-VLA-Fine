@@ -548,3 +548,73 @@ def _assert_quantile_stats(norm_stats: at.PyTree[NormStats]) -> None:
             raise ValueError(
                 f"quantile stats must be provided if use_quantile_norm is True. Key {k} is missing q01 or q99."
             )
+
+
+@dataclasses.dataclass(frozen=True)
+class AddPhaseAndStageLabel(DataTransformFn):
+    """
+    为每个样本注入:
+      - phase_id: 0 move / 1 interact / 2 stabilize
+      - stage_id: 0 reach / 1 grasp / 2 transport / 3 align / 4 insert_place / 5 final_adjust
+    这版先走启发式规则。
+    """
+    move_threshold: float = 0.08
+    slow_threshold: float = 0.01
+
+    def __call__(self, data: DataDict) -> DataDict:
+        state = data.get("state", None)
+        actions = data.get("actions", None)
+        phase_id = np.int32(0)
+        stage_id = np.int32(0)
+
+        # ===== 你需要按自己的 state 维度改这里 =====
+        # 默认假设最后一维某一位是 gripper / contact proxy
+        gripper = None
+        if state is not None and isinstance(state, np.ndarray) and state.shape[-1] > 0:
+            gripper = float(state[-1])
+
+        act_mag = None
+        if actions is not None and isinstance(actions, np.ndarray):
+            # actions 可能是 [T, D] 或 [D]
+            cur_action = actions[0] if actions.ndim == 2 else actions
+            act_mag = float(np.linalg.norm(cur_action))
+
+        # ===== heuristic phase =====
+        if act_mag is None:
+            phase_id = np.int32(0)
+        elif act_mag > self.move_threshold:
+            phase_id = np.int32(0)   # move
+        elif gripper is not None and gripper > 0.5:
+            phase_id = np.int32(1)   # interact
+        elif act_mag < self.slow_threshold:
+            phase_id = np.int32(2)   # stabilize
+        else:
+            phase_id = np.int32(1)
+
+        # ===== heuristic stage =====
+        if phase_id == 0:
+            stage_id = np.int32(0)   # reach_target
+        elif phase_id == 1:
+            if gripper is not None and gripper > 0.5:
+                stage_id = np.int32(1)   # grasp / manipulation
+            else:
+                stage_id = np.int32(3)   # align
+        else:
+            stage_id = np.int32(5)   # final_adjust
+
+        data["phase_id"] = phase_id
+        data["stage_id"] = stage_id
+        return data
+
+
+@dataclasses.dataclass(frozen=True)
+class BuildHistoryTokens(DataTransformFn):
+    memory_len: int = 6
+    memory_dim: int = 256
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if "history_tokens" not in data:
+            data["history_tokens"] = np.zeros((self.memory_len, self.memory_dim), dtype=np.float32)
+        if "history_mask" not in data:
+            data["history_mask"] = np.zeros((self.memory_len,), dtype=bool)
+        return data

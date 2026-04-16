@@ -15,4 +15,4 @@ export XLA_FLAGS="--xla_gpu_force_compilation_parallelism=1 --xla_gpu_enable_lat
 # 关键：绕过 tyro CLI 解析
 export USE_DIRECT_CONFIG="true"
 
-python scripts/train.py --config-name=acot_icra_simulation_challenge_all_improvements --exp-name=all_improvements_v1
+python scripts/train.py --config-name=acot_icra_simulation_challenge_all_improvements --exp-name=all_improvements_v2

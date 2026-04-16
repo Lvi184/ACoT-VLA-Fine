@@ -118,6 +118,16 @@ class Observation(Generic[ArrayT]):
     # Token loss mask (for FAST autoregressive model).
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
+    # ===== ACoT-VLA extensions =====
+    # Phase ID: 0 = move, 1 = interact, 2 = stabilize
+    phase_id: at.Int[ArrayT, "*b"] | None = None
+    # Stage ID: 0 = reach, 1 = grasp, 2 = transport, 3 = align, 4 = insert_place, 5 = final_adjust
+    stage_id: at.Int[ArrayT, "*b"] | None = None
+    # History tokens: [batch, memory_len, memory_dim]
+    history_tokens: at.Float[ArrayT, "*b k d"] | None = None
+    # History mask: [batch, memory_len]
+    history_mask: at.Bool[ArrayT, "*b k"] | None = None
+
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
         """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
@@ -136,6 +146,10 @@ class Observation(Generic[ArrayT]):
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
             token_ar_mask=data.get("token_ar_mask"),
             token_loss_mask=data.get("token_loss_mask"),
+            phase_id=data.get("phase_id"),
+            stage_id=data.get("stage_id"),
+            history_tokens=data.get("history_tokens"),
+            history_mask=data.get("history_mask"),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
