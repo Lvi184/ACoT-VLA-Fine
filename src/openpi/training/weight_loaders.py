@@ -136,7 +136,7 @@ def _merge_params(loaded_params: at.Params, params: at.Params, *, missing_regex:
         expected_param = flat_ref[k]
 
         cloned = False
-        cloned_path_source = re.sub(r'(\w+)\_(\d+)', r'\g<1>_1', key_path, count=1)
+        cloned_path_source = re.sub(r'(\w+)/(\d+)', r'\g<1>/1', key_path, count=1)
         k_source = tuple(cloned_path_source.split('/'))
 
         if cloned_path_source != key_path:

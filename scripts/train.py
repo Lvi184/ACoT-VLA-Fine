@@ -349,4 +349,26 @@ def main(config: _config.TrainConfig):
 
 
 if __name__ == "__main__":
-    main(_config.cli())
+    # Bypass tyro CLI parsing - directly load our config
+    import sys
+    import os
+    import dataclasses
+    
+    # Check if we should use direct config loading
+    if os.getenv("USE_DIRECT_CONFIG", "false").lower() == "true":
+        print("Using direct config loading (bypassing tyro CLI)")
+        # Get config name from environment variable, or use default
+        config_name = os.getenv("DIRECT_CONFIG_NAME", "acot_icra_simulation_challenge_reasoning_to_action")
+        print(f"Using config: {config_name}")
+        config = _config.get_config(config_name)
+        # Override exp_name if provided
+        exp_name = "finetune_dual_ae_lora_v1"
+        for i, arg in enumerate(sys.argv):
+            if arg.startswith("--exp-name=") or arg.startswith("--exp_name="):
+                exp_name = arg.split("=", 1)[1]
+        # Use dataclasses.replace to update the config
+        config = dataclasses.replace(config, exp_name=exp_name)
+        main(config)
+    else:
+        # Original behavior - use tyro CLI
+        main(_config.cli())

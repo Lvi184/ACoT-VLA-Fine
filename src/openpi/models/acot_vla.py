@@ -286,6 +286,11 @@ class ACOTConfig(_model.BaseModelConfig):
     attention_pooling_implicit_extractor: bool = False  # type: ignore
     downsample_based_implicit_extractor: bool = False  # type: ignore
 
+    # Step continuity loss parameters
+    use_step_continuity_loss: bool = False  # type: ignore
+    step_continuity_loss_weight: float = 0.1  # type: ignore
+    step_continuity_loss_type: str = "l2"  # type: ignore  # "l2" or "l1"
+
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
@@ -377,6 +382,7 @@ class ACOT_VLA(_model.BaseModel):
     def __init__(self, config: ACOTConfig, rngs: nnx.Rngs):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
         self.pi05 = config.pi05
+        self.model_config = config  # Save the config for later use
 
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         coarse_action_expert_config = _gemma.get_config(config.coarse_action_expert_variant)
@@ -775,7 +781,7 @@ class ACOT_VLA(_model.BaseModel):
             adarms_cond=[None, None, adarms_expert_cond],
         )
 
-
+        # Calculate base losses
         if self.adopt_explicit_action_reasoner:
             # trainer explicit action reasoner using flow matching
             v_ref_t = self.coarse_action_out_proj(suffix_ref_action_out[:, -self.coarse_action_horizon :])
@@ -783,13 +789,46 @@ class ACOT_VLA(_model.BaseModel):
 
             action_diff_ref = u_ref_t - v_ref_t
             action_diff_expert = u_expert_t - v_expert_t
-            # Since we set the balance factor as 0.5, the following loss is equal
-            return jnp.mean(jnp.square(action_diff_ref)) + jnp.mean(jnp.square(action_diff_expert))
+            base_loss = jnp.mean(jnp.square(action_diff_ref)) + jnp.mean(jnp.square(action_diff_expert))
 
+            # Get predicted actions for step continuity loss
+            pred_actions = x_expert_t + time_expanded * v_expert_t
+            pred_coarse_actions = x_ref_t + time_expanded * v_ref_t
         else:
             v_expert_t = self.action_out_proj(suffix_expert_out[:, -self.action_horizon :])
             action_diff_expert = u_expert_t - v_expert_t
-            return jnp.mean(jnp.square(action_diff_expert))
+            base_loss = jnp.mean(jnp.square(action_diff_expert))
+
+            # Get predicted actions for step continuity loss
+            pred_actions = x_expert_t + time_expanded * v_expert_t
+            pred_coarse_actions = None
+
+        # Calculate step continuity loss if enabled
+        if hasattr(self.model_config, 'use_step_continuity_loss') and self.model_config.use_step_continuity_loss:
+            continuity_loss = 0.0
+            
+            # Loss type: L2 or L1
+            if self.model_config.step_continuity_loss_type == "l2":
+                dist_fn = lambda x: jnp.square(x)
+            else:  # l1
+                dist_fn = lambda x: jnp.abs(x)
+
+            # Compute continuity loss for expert actions
+            if pred_actions.shape[1] > 1:
+                action_diffs = pred_actions[:, 1:, :] - pred_actions[:, :-1, :]
+                continuity_loss += jnp.mean(dist_fn(action_diffs))
+
+            # Compute continuity loss for coarse actions if available
+            if self.adopt_explicit_action_reasoner and pred_coarse_actions is not None:
+                if pred_coarse_actions.shape[1] > 1:
+                    coarse_action_diffs = pred_coarse_actions[:, 1:, :] - pred_coarse_actions[:, :-1, :]
+                    continuity_loss += jnp.mean(dist_fn(coarse_action_diffs))
+
+            # Weighted sum of base loss and continuity loss
+            total_loss = base_loss + self.model_config.step_continuity_loss_weight * continuity_loss
+            return total_loss
+        else:
+            return base_loss
 
     @override
     def sample_actions(

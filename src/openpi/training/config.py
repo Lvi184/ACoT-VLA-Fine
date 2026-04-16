@@ -1818,7 +1818,7 @@ _CONFIGS = [
         # For the ICRA sim challenge, we set both coarse and fine action horizons to 30 since the tasks are relatively long-horizon.
         # We also use both explicit and implicit action reasoners, and use the downsample-based implicit extractor.
         # You can modify these design choices based on the specific tasks and dataset. 
-        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
+        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", coarse_action_expert_variant="gemma_300m_lora", action_expert_variant="gemma_300m_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
         data=LerobotACOTGo2DataConfig(
             default_prompt = "Fine-tuning on low-score ICRA tasks (FROZEN LORA).",
             repo_id = [
@@ -1932,6 +1932,351 @@ _CONFIGS = [
         num_workers = 4,
         batch_size = 2,
         # You can select to freeze certain parts of the model during training by setting the corresponding flags to True
+        freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
+            freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False], freeze_lora=True
+        )
+    ),
+    TrainConfig(
+        name="acot_icra_simulation_challenge_reasoning_to_action_lora_rank8",
+        # For the ICRA sim challenge, we set both coarse and fine action horizons to 30 since the tasks are relatively long-horizon.
+        # We also use both explicit and implicit action reasoners, and use the downsample-based implicit extractor.
+        # This version uses LoRA rank=8 for Dual AE to reduce overfitting.
+        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", coarse_action_expert_variant="gemma_300m_lora", action_expert_variant="gemma_300m_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
+        data=LerobotACOTGo2DataConfig(
+            default_prompt = "Fine-tuning on low-score ICRA tasks (FROZEN LORA, LoRA rank=8).",
+            repo_id = [
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/open_door",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/place_block_into_box",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/hold_pot",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/pour_workpiece",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/take_wrong_item_shelf",
+            ],
+            assets=AssetsConfig(
+                assets_dir=None,
+                asset_id="/root/gpufree-data/ACoT-VLA/assets/finetune_low_score",
+            ),
+            prompt_map_inject_to_training = {
+                "Sort packages": (
+                    "Grab the <color> package on the table, "
+                    "turn the waist right to face the barcode scanner, "
+                    "place the package on the scanning table with the barcode facing up. "
+                    "Then, grab the package, "
+                    "rotate the waist and place the package in the blue bin. "
+                    "Finally, return the waist back to face the initial table",
+                    0.5
+                ),
+                "Stock supermarket shelves  \nStraighten products  \nAttend ICRA conference  \nOperate SIM card": (
+                    "Pick up the wei-chuan orange juice in the shopping basket, "
+                    "and place it on the shelf. "
+                    "Then, straighten the toppled wei-chuan grape juice",
+                    0.5
+                ),
+                "Turn the doorknob": ("Turn the doorknob and push the door open", 0.5),
+                "Insert building block holes_2_SIM": (
+                    "Pick up the yellow circular block from the table, "
+                    "and place it into the round hole of the block box",
+                    0.5
+                ),
+                "Clear the desktop": (
+                    "Pick up the pen on the left side and place it into the pen holder, "
+                    "close the laptop, "
+                    "pick up the tissue on the table and place it into the trash bin on the right size. "
+                    "Then, pick up the mouse and place it on the right side of the laptop. "
+                    "Finally, straighten the colored pencil box",
+                    0.5
+                ),
+                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.5),
+                "Unload workpiece_icra_SIM": ("Pour the workpiece into the box", 0.5),
+                "Make popcorn": ("Scoop the popcorn and pour it into the popcorn bucket", 0.5),
+                "Remove misplaced beverages from shelves": (
+                    "Pick up the incorrectly placed item from the shelf, "
+                    "and place it into the shopping basket",
+                    0.2
+                ),
+            },
+            repack_transforms =_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "top_head": "observation.images.top_head",
+                                "hand_left": "observation.images.hand_left",
+                                "hand_right": "observation.images.hand_right",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                            "task": "task",
+                            "episode_index": "episode_index"
+                        }
+                    )
+                ]
+            ),
+            base_config = DataConfig(dataloader_sampler = "subtask", prompt_from_hl_instruction = True),
+            joint_action_shifts = (2, 1),
+            extra_delta_transform = (True, True),
+            delta_action_mask = _transforms.make_bool_mask(14, -18)
+        ),
+        lr_schedule = _optimizer.CosineDecaySchedule(
+            warmup_steps = 1_000,
+            peak_lr = 1e-5,
+            decay_steps = 50_000,
+            decay_lr = 1e-6,
+        ),
+        optimizer = _optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay = 0.999,
+        weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
+            "/root/gpufree-data/ACoT-VLA/checkpoints/baseline/30000/params"
+        ),
+        num_train_steps = 10_000,
+        save_interval = 2000,
+        num_workers = 4,
+        batch_size = 2,
+        freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
+            freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False], freeze_lora=True
+        )
+    ),
+    TrainConfig(
+        name="acot_icra_simulation_challenge_reasoning_to_action_partial_unfreeze",
+        # For the ICRA sim challenge, we set both coarse and fine action horizons to 30 since the tasks are relatively long-horizon.
+        # We also use both explicit and implicit action reasoners, and use the downsample-based implicit extractor.
+        # This version PARTIALLY UNFREEZES PaliGemma LoRA - both PaliGemma and Dual AE LoRA are trainable.
+        model=acot_vla.ACOTConfig(coarse_action_horizon=30, action_horizon=30, paligemma_variant="gemma_2b_lora", coarse_action_expert_variant="gemma_300m_lora", action_expert_variant="gemma_300m_lora", adopt_explicit_action_reasoner=True, adopt_implicit_action_reasoner=True, downsample_based_implicit_extractor=True),
+        data=LerobotACOTGo2DataConfig(
+            default_prompt = "Fine-tuning on low-score ICRA tasks (PARTIAL UNFREEZE - PaliGemma LoRA also trainable).",
+            repo_id = [
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/open_door",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/place_block_into_box",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/hold_pot",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/pour_workpiece",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/take_wrong_item_shelf",
+            ],
+            assets=AssetsConfig(
+                assets_dir=None,
+                asset_id="/root/gpufree-data/ACoT-VLA/assets/finetune_low_score",
+            ),
+            prompt_map_inject_to_training = {
+                "Sort packages": (
+                    "Grab the <color> package on the table, "
+                    "turn the waist right to face the barcode scanner, "
+                    "place the package on the scanning table with the barcode facing up. "
+                    "Then, grab the package, "
+                    "rotate the waist and place the package in the blue bin. "
+                    "Finally, return the waist back to face the initial table",
+                    0.5
+                ),
+                "Stock supermarket shelves  \nStraighten products  \nAttend ICRA conference  \nOperate SIM card": (
+                    "Pick up the wei-chuan orange juice in the shopping basket, "
+                    "and place it on the shelf. "
+                    "Then, straighten the toppled wei-chuan grape juice",
+                    0.5
+                ),
+                "Turn the doorknob": ("Turn the doorknob and push the door open", 0.5),
+                "Insert building block holes_2_SIM": (
+                    "Pick up the yellow circular block from the table, "
+                    "and place it into the round hole of the block box",
+                    0.5
+                ),
+                "Clear the desktop": (
+                    "Pick up the pen on the left side and place it into the pen holder, "
+                    "close the laptop, "
+                    "pick up the tissue on the table and place it into the trash bin on the right size. "
+                    "Then, pick up the mouse and place it on the right side of the laptop. "
+                    "Finally, straighten the colored pencil box",
+                    0.5
+                ),
+                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.5),
+                "Unload workpiece_icra_SIM": ("Pour the workpiece into the box", 0.5),
+                "Make popcorn": ("Scoop the popcorn and pour it into the popcorn bucket", 0.5),
+                "Remove misplaced beverages from shelves": (
+                    "Pick up the incorrectly placed item from the shelf, "
+                    "and place it into the shopping basket",
+                    0.2
+                ),
+            },
+            repack_transforms =_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "top_head": "observation.images.top_head",
+                                "hand_left": "observation.images.hand_left",
+                                "hand_right": "observation.images.hand_right",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                            "task": "task",
+                            "episode_index": "episode_index"
+                        }
+                    )
+                ]
+            ),
+            base_config = DataConfig(dataloader_sampler = "subtask", prompt_from_hl_instruction = True),
+            joint_action_shifts = (2, 1),
+            extra_delta_transform = (True, True),
+            delta_action_mask = _transforms.make_bool_mask(14, -18)
+        ),
+        lr_schedule = _optimizer.CosineDecaySchedule(
+            warmup_steps = 1_000,
+            peak_lr = 1e-5,
+            decay_steps = 50_000,
+            decay_lr = 1e-6,
+        ),
+        optimizer = _optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay = 0.999,
+        weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
+            "/root/gpufree-data/ACoT-VLA/checkpoints/baseline/30000/params"
+        ),
+        num_train_steps = 10_000,
+        save_interval = 2000,
+        num_workers = 4,
+        batch_size = 2,
+        # KEY CHANGE: freeze_lora=False - PaliGemma LoRA is also trainable!
+        freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
+            freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False], freeze_lora=False
+        )
+    ),
+    TrainConfig(
+        name="acot_icra_simulation_challenge_reasoning_to_action_step_continuity",
+        # For the ICRA sim challenge, we set both coarse and fine action horizons to 30 since the tasks are relatively long-horizon.
+        # We also use both explicit and implicit action reasoners, and use the downsample-based implicit extractor.
+        # This version adds STEP CONTINUITY LOSS to improve multi-step task performance!
+        overwrite=True,
+        model=acot_vla.ACOTConfig(
+            coarse_action_horizon=30, 
+            action_horizon=30, 
+            paligemma_variant="gemma_2b_lora", 
+            coarse_action_expert_variant="gemma_300m_lora", 
+            action_expert_variant="gemma_300m_lora", 
+            adopt_explicit_action_reasoner=True, 
+            adopt_implicit_action_reasoner=True, 
+            downsample_based_implicit_extractor=True,
+            # NEW: Step continuity loss parameters!
+            use_step_continuity_loss=True,
+            step_continuity_loss_weight=0.1,
+            step_continuity_loss_type="l2"
+        ),
+        data=LerobotACOTGo2DataConfig(
+            default_prompt = "Fine-tuning on low-score ICRA tasks (STEP CONTINUITY LOSS - improves multi-step performance!).",
+            repo_id = [
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/open_door",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/place_block_into_box",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/hold_pot",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/pour_workpiece",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/scoop_popcorn_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/take_wrong_item_shelf",
+            ],
+            assets=AssetsConfig(
+                assets_dir=None,
+                asset_id="/root/gpufree-data/ACoT-VLA/assets/finetune_low_score",
+            ),
+            prompt_map_inject_to_training = {
+                "Sort packages": (
+                    "Grab the <color> package on the table, "
+                    "turn the waist right to face the barcode scanner, "
+                    "place the package on the scanning table with the barcode facing up. "
+                    "Then, grab the package, "
+                    "rotate the waist and place the package in the blue bin. "
+                    "Finally, return the waist back to face the initial table",
+                    0.5
+                ),
+                "Stock supermarket shelves  \nStraighten products  \nAttend ICRA conference  \nOperate SIM card": (
+                    "Pick up the wei-chuan orange juice in the shopping basket, "
+                    "and place it on the shelf. "
+                    "Then, straighten the toppled wei-chuan grape juice",
+                    0.5
+                ),
+                "Turn the doorknob": ("Turn the doorknob and push the door open", 0.5),
+                "Insert building block holes_2_SIM": (
+                    "Pick up the yellow circular block from the table, "
+                    "and place it into the round hole of the block box",
+                    0.5
+                ),
+                "Clear the desktop": (
+                    "Pick up the pen on the left side and place it into the pen holder, "
+                    "close the laptop, "
+                    "pick up the tissue on the table and place it into the trash bin on the right size. "
+                    "Then, pick up the mouse and place it on the right side of the laptop. "
+                    "Finally, straighten the colored pencil box",
+                    0.5
+                ),
+                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.5),
+                "Unload workpiece_icra_SIM": ("Pour the workpiece into the box", 0.5),
+                "Make popcorn": ("Scoop the popcorn and pour it into the popcorn bucket", 0.5),
+                "Remove misplaced beverages from shelves": (
+                    "Pick up the incorrectly placed item from the shelf, "
+                    "and place it into the shopping basket",
+                    0.2
+                ),
+            },
+            repack_transforms =_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "top_head": "observation.images.top_head",
+                                "hand_left": "observation.images.hand_left",
+                                "hand_right": "observation.images.hand_right",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                            "task": "task",
+                            "episode_index": "episode_index"
+                        }
+                    )
+                ]
+            ),
+            base_config = DataConfig(dataloader_sampler = "subtask", prompt_from_hl_instruction = True),
+            joint_action_shifts = (2, 1),
+            extra_delta_transform = (True, True),
+            delta_action_mask = _transforms.make_bool_mask(14, -18)
+        ),
+        lr_schedule = _optimizer.CosineDecaySchedule(
+            warmup_steps = 1_000,
+            peak_lr = 1e-5,
+            decay_steps = 50_000,
+            decay_lr = 1e-6,
+        ),
+        optimizer = _optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay = 0.999,
+        weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
+            "/root/gpufree-data/ACoT-VLA/checkpoints/baseline/30000/params"
+        ),
+        num_train_steps = 10_000,
+        save_interval = 2000,
+        num_workers = 4,
+        batch_size = 2,
         freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
             freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False], freeze_lora=True
         )
