@@ -127,7 +127,7 @@ def init_train_state(
     # Initialize the train state and mix in the partial params.
     train_state = jax.jit(
         init,
-        donate_argnums=(1,),  # donate the partial params buffer.
+        donate_argnums=(1,), # donate the partial params buffer.
         in_shardings=replicated_sharding,
         out_shardings=state_sharding,
     )(init_rng, partial_params)
@@ -349,4 +349,38 @@ def main(config: _config.TrainConfig):
 
 
 if __name__ == "__main__":
-    main(_config.cli())
+    # Bypass tyro CLI parsing - directly load our config
+    import sys
+    import os
+    import dataclasses
+    
+    # Check if we should use direct config loading
+    if os.getenv("USE_DIRECT_CONFIG", "false").lower() == "true":
+        print("Using direct config loading (bypassing tyro CLI)")
+        
+        # Default config name
+        config_name = 'acot_icra_simulation_challenge_reasoning_to_action'
+        exp_name = "finetune_dual_ae_lora_v1"
+        resume = False
+        
+        # Parse command line arguments
+        for i, arg in enumerate(sys.argv):
+            if arg.startswith("--config-name=") or arg.startswith("--config_name="):
+                config_name = arg.split("=", 1)[1]
+            if arg.startswith("--exp-name=") or arg.startswith("--exp_name="):
+                exp_name = arg.split("=", 1)[1]
+            if arg.startswith("--resume=") or arg.startswith("--resume="):
+                resume_val = arg.split("=", 1)[1].lower()
+                resume = resume_val == "true" or resume_val == "1"
+        
+        print(f"Loading config: {config_name}")
+        print(f"Experiment name: {exp_name}")
+        print(f"Resume: {resume}")
+        
+        config = _config.get_config(config_name)
+        # Use dataclasses.replace to update the config
+        config = dataclasses.replace(config, exp_name=exp_name, resume=resume, overwrite=not resume)
+        main(config)
+    else:
+        # Original behavior - use tyro CLI
+        main(_config.cli())

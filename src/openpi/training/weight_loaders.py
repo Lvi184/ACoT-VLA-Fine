@@ -136,7 +136,9 @@ def _merge_params(loaded_params: at.Params, params: at.Params, *, missing_regex:
         expected_param = flat_ref[k]
 
         cloned = False
-        cloned_path_source = re.sub(r'(\w+)\_(\d+)', r'\g<1>_1', key_path, count=1)
+        # 匹配类似 "k_proj/3" 这样的路径片段（斜杠分隔的数字索引）
+        # 将最后一个数字索引替换为 0，因为 baseline 里索引从 0 开始
+        cloned_path_source = re.sub(r'(\w+)/(\d+)(?=/|$)', r'\g<1>/0', key_path, count=1)
         k_source = tuple(cloned_path_source.split('/'))
 
         if cloned_path_source != key_path:
@@ -149,6 +151,20 @@ def _merge_params(loaded_params: at.Params, params: at.Params, *, missing_regex:
                     cloned = True
                 else:
                     print(f"[WARN] Clone attempt failed for {key_path}: source shape {loaded_param_source.shape} != target shape {expected_param.shape}")
+        
+        # 如果从 0 克隆失败，再试试从 1 克隆（兼容不同的索引起始）
+        if not cloned:
+            cloned_path_source = re.sub(r'(\w+)/(\d+)(?=/|$)', r'\g<1>/1', key_path, count=1)
+            k_source = tuple(cloned_path_source.split('/'))
+            
+            if cloned_path_source != key_path:
+                if k_source in flat_loaded:
+                    loaded_param_source = flat_loaded[k_source]
+
+                    if expected_param.shape == loaded_param_source.shape:
+                        result[k] = loaded_param_source.astype(expected_param.dtype)
+                        print(f"[INFO] Cloned missing param {key_path} from {cloned_path_source} {expected_param.shape}")
+                        cloned = True
 
         if not cloned:
             if init == "zeros":

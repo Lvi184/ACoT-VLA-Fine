@@ -409,6 +409,9 @@ class ACOT_VLA(_model.BaseModel):
             self.coarse_time_mlp_out = nnx.Linear(coarse_action_expert_config.width, coarse_action_expert_config.width, rngs=rngs)
             self.time_mlp_in = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
             self.time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
+            # 新增：pi05 模式下的状态编码器
+            self.state_proj_coarse = nnx.Linear(config.action_dim, coarse_action_expert_config.width, rngs=rngs)
+            self.state_proj_expert = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
         else:
             self.state_proj = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
             self.coarse_action_time_mlp_in = nnx.Linear(2 * coarse_action_expert_config.width, coarse_action_expert_config.width, rngs=rngs)
@@ -565,9 +568,20 @@ class ACOT_VLA(_model.BaseModel):
         ar_mask = []
         tokens = []
         if not self.pi05:
-            # add a single state token
+            # add a single state token (non-pi05 模式)
             state_token = self.state_proj(obs.state)[:, None, :]
-            # state_token = self.state_proj(obs.state)[:, None, :]
+            tokens.append(state_token)
+            input_mask.append(jnp.ones((obs.state.shape[0], 1), dtype=jnp.bool_))
+            # image/language inputs do not attend to state or actions
+            ar_mask += [True]
+        else:
+            # pi05 模式：添加状态编码
+            if suf_type == "reasoner":
+                # Coarse action expert 使用 coarse 状态编码器
+                state_token = self.state_proj_coarse(obs.state)[:, None, :]
+            else:
+                # Expert 使用 expert 状态编码器
+                state_token = self.state_proj_expert(obs.state)[:, None, :]
             tokens.append(state_token)
             input_mask.append(jnp.ones((obs.state.shape[0], 1), dtype=jnp.bool_))
             # image/language inputs do not attend to state or actions
