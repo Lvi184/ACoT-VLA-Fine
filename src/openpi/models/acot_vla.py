@@ -536,6 +536,8 @@ class ACOT_VLA(_model.BaseModel):
         self.use_phase_token = config.use_phase_token
         self.use_memory_token = config.use_memory_token
         self.use_stage_head = config.use_stage_head
+        self.phase_gate_on_visual = config.phase_gate_on_visual
+        self.phase_gate_on_state = config.phase_gate_on_state
         
         if self.use_phase_token:
             self.phase_embed = nnx.Embed(
@@ -560,7 +562,7 @@ class ACOT_VLA(_model.BaseModel):
         if self.use_memory_token:
             self.memory_in_proj = nnx.Linear(config.memory_dim, action_expert_config.width, rngs=rngs)
             self.memory_out_proj = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
-            # 简化版：先用两层 MLP 替代复杂 temporal transformer
+            # 先用两层MLP，后续再升级GRU
             self.memory_fuse = MLP(
                 input_dim=action_expert_config.width,
                 hidden_dim=action_expert_config.width,
@@ -597,7 +599,15 @@ class ACOT_VLA(_model.BaseModel):
         # embed images
         for name in obs.images:
             image_tokens, _ = self.PaliGemma.img(obs.images[name], train=False)
-
+            
+            # Apply phase-aware gating if enabled
+            if self.use_phase_token and self.phase_gate_on_visual and obs.phase_id is not None:
+                phase_emb = self.phase_embed(obs.phase_id)  # [B, D]
+                gate = jax.nn.sigmoid(self.phase_visual_gate(phase_emb))  # [B, D]
+                # gate: [B, D] -> repeat to [B, s, D]
+                gate = einops.repeat(gate, "b d -> b s d", s=image_tokens.shape[1])
+                image_tokens = image_tokens * gate
+            
             tokens.append(image_tokens)
             input_mask.append(
                 einops.repeat(
@@ -655,6 +665,13 @@ class ACOT_VLA(_model.BaseModel):
         if not self.pi05:
             # add a single state token (non-pi05 模式)
             state_token = self.state_proj(obs.state)[:, None, :]
+            
+            # Apply phase-aware gating if enabled
+            if self.use_phase_token and self.phase_gate_on_state and obs.phase_id is not None:
+                phase_emb = self.phase_embed(obs.phase_id)  # [B, D]
+                gate = jax.nn.sigmoid(self.phase_state_gate(phase_emb))  # [B, D]
+                state_token = state_token * gate[:, None, :]
+            
             tokens.append(state_token)
             input_mask.append(jnp.ones((obs.state.shape[0], 1), dtype=jnp.bool_))
             # image/language inputs do not attend to state or actions

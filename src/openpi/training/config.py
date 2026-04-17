@@ -2493,6 +2493,157 @@ _CONFIGS = [
         freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
             freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[False, False], freeze_lora=True
         )
+    ),
+    # 只在弱任务（分数 < 0.9）上训练三个新模块，从 all_improvements_v1 (6.33分) 继续
+    # 过采样策略：分数越低，采样越多
+    TrainConfig(
+        name="acot_icra_simulation_challenge_weak_tasks_phase_mem_stage",
+        model=acot_vla.ACOTConfig(
+            coarse_action_horizon=30, 
+            action_horizon=30, 
+            paligemma_variant="gemma_2b_lora", 
+            adopt_explicit_action_reasoner=True, 
+            adopt_implicit_action_reasoner=True, 
+            downsample_based_implicit_extractor=True,
+            # ===== Phase-aware extensions =====
+            use_phase_token=True,
+            num_phases=3,
+            phase_gate_on_visual=True,
+            phase_gate_on_state=True,
+            phase_loss_weight=0.0,
+            # ===== Memory extensions =====
+            use_memory_token=True,
+            memory_len=6,
+            memory_dim=256,
+            # ===== Weak hierarchical stage head =====
+            # 第一轮先关闭，等 phase + memory 稳定后再加
+            use_stage_head=False,
+            num_stages=6,
+            stage_loss_weight=0.0,
+        ),
+        data=LerobotACOTGo2DataConfig(
+            default_prompt = "Fine-tuning phase/memory/stage modules only on weak tasks (<0.9), continuing from all_improvements_v1.",
+            repo_id = [
+                # Task_1: Sorting Packages (0.52) → 1x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                # Task_2: Sorting Packages Continuous (0.18) → 3x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/sorting_packages_part_3",
+                # Task_5: Stock and Straighten Shelf (0.22) → 2x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/stock_and_straighten_shelf_part_2",
+                # Task_8: Place Block into Box (0.54) → 1x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/place_block_into_box",
+                # Task_9: Hold Pot (0.68) → 1x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/hold_pot",
+                # Task_10: Clean the Desktop (0.34) → 2x
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_1",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_part_2",
+                "/root/gpufree-data/AgiBotWorldChallenge-2026/agibot_data_without_depth/clean_the_desktop_addition",
+            ],
+            assets=AssetsConfig(
+                assets_dir="/root/gpufree-data/ACoT-VLA/checkpoints/baseline/30000",
+                asset_id="assets",
+            ),
+            prompt_map_inject_to_training = {
+                "Insert building block holes_2_SIM": (
+                    "Pick up the yellow circular block from the table, "
+                    "and place it into the round hole of the block box",
+                    0.7
+                ),
+                "Sort packages": (
+                    "Step 1: Locate and follow the <color> package on the table. "
+                    "Step 2: Pick up the <color> package with your gripper. "
+                    "Step 3: Turn the waist right to face the barcode scanner. "
+                    "Step 4: Place the package on the scanning table with the barcode facing up. "
+                    "Step 5: Grab the package again from the scanning table. "
+                    "Step 6: Rotate the waist and place the package in the blue bin. "
+                    "Step 7: Return the waist back to face the initial table.",
+                    0.8
+                ),
+                "Sort packages continuously": (
+                    "Step 1: Pick up the first package and make sure it stands upright. "
+                    "Step 2: Pick up the second package and make sure it stands upright. "
+                    "Step 3: Pick up the third package and make sure it stands upright. "
+                    "Step 4: Pick up the fourth package and make sure it stands upright. "
+                    "Ensure all packages are properly aligned and standing steadily on the surface.",
+                    0.9
+                ),
+                "Stock supermarket shelves  \nStraighten products  \nAttend ICRA conference  \nOperate SIM card": (
+                    "Step 1: Follow the shopping basket to locate the wei-chuan orange juice. "
+                    "Step 2: Pick up the wei-chuan orange juice from the shopping basket with your gripper. "
+                    "Step 3: Move the orange juice to the shelf and place it inside the designated bounding box area. "
+                    "Step 4: Follow the shelf to find the toppled wei-chuan grape juice. "
+                    "Step 5: Straighten the wei-chuan grape juice bottle and make sure it stands upright on the shelf.",
+                    0.7
+                ),
+                "Carry the pot": ("Grasp the two handles of the pot and place it on the stove", 0.8),
+                "Clear the desktop": (
+                    "Step 1: Pick up the pen on the left side of the desk and place it into the pen holder. "
+                    "Step 2: Close the laptop lid completely until it clicks shut. "
+                    "Step 3: Pick up the crumpled tissue on the table and place it into the trash bin on the right side. "
+                    "Step 4: Pick up the computer mouse and place it neatly on the right side of the closed laptop. "
+                    "Step 5: Straighten the colored pencil box and make sure it stands upright on the right side of the desk. "
+                    "Check that all items are in their proper places and the desktop looks tidy.",
+                    0.8
+                ),
+            },
+            repack_transforms =_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "top_head": "observation.images.top_head",
+                                "hand_left": "observation.images.hand_left",
+                                "hand_right": "observation.images.hand_right",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                            "task": "task",
+                            "episode_index": "episode_index"
+                        }
+                    ),
+                    _transforms.AddPhaseAndStageLabel(),
+                    _transforms.BuildHistoryTokens(memory_len=6, memory_dim=256),
+                ]
+            ),
+            base_config = DataConfig(dataloader_sampler = "subtask", prompt_from_hl_instruction = True),
+            joint_action_shifts = (2, 1),
+            extra_delta_transform = (True, True),
+            delta_action_mask = _transforms.make_bool_mask(14, -18)
+        ),
+        lr_schedule = _optimizer.CosineDecaySchedule(
+            warmup_steps = 500,
+            peak_lr = 1e-5,
+            decay_steps = 15_000,
+            decay_lr = 1e-6,
+        ),
+        optimizer = _optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay = 0.999,
+        # 从 all_improvements_v1 继续训练（包含所有已有改进，6.33分）
+        weight_loader = weight_loaders.ACOTCheckpointWeightLoader(
+            "/root/gpufree-data/ACoT-VLA/checkpoints/acot_icra_simulation_challenge_all_improvements/all_improvements_v1/9999/params"
+        ),
+        num_train_steps = 15_000,
+        save_interval = 3_000,
+        num_workers = 4 if not os.getenv("DEBUG_MODE", default=False) else 1,
+        batch_size = 2 if not os.getenv("DEBUG_MODE", default=False) else 1,
+        # 冻结策略：冻结LLM主干和视觉主干，只放开新模块和action heads
+        freeze_filter = acot_vla.ACOTConfig(paligemma_variant="gemma_2b_lora").get_freeze_filter(
+            freeze_vision = True, freeze_llm = True, freeze_llm_embedder=True, freeze_dual_ae=[True, True], freeze_lora=True
+        ),
     )
 ]
 
