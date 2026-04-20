@@ -512,7 +512,23 @@ def _collate_fn(items):
     # Make sure to convert to numpy arrays before stacking since some of the incoming elements
     # may be JAX arrays.
     filter_items = [x for x in items if x is not None]
-    return jax.tree.map(lambda *x: np.stack(np.asarray(x), axis=0), *filter_items)
+    
+    # 如果过滤后为空，返回 None 让数据加载器跳过这个batch
+    if not filter_items:
+        return None
+    
+    # 兼容不同 JAX 版本写法，使用 jax.tree.map 正确方式
+    # 对于当前 JAX 0.5.3，jax.tree.map 是 map(f, tree, *rest)
+    first = filter_items[0]
+    rest = filter_items[1:]
+    
+    def stack_items(x, *args):
+        arrs = [np.asarray(x)]
+        for y in args:
+            arrs.append(np.asarray(y))
+        return np.stack(arrs, axis=0)
+    
+    return jax.tree.map(stack_items, first, *rest)
 
 
 def _worker_init_fn(worker_id: int) -> None:
@@ -589,4 +605,6 @@ class DataLoaderACOTImpl(DataLoader):
 
     def __iter__(self):
         for batch in self._data_loader:
+            if batch is None:
+                continue
             yield _model.Observation.from_dict(batch), batch["actions"], batch["coarse_actions"]

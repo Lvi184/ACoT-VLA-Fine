@@ -272,6 +272,7 @@ class ACOTConfig(_model.BaseModelConfig):
 
     # Set the model specific defaults.
     action_dim: int = 32
+    state_dim: int = 14
     coarse_action_horizon: int = 50
     action_horizon: int = 30
     max_token_len: int = None  # type: ignore
@@ -306,7 +307,7 @@ class ACOTConfig(_model.BaseModelConfig):
 
     def __post_init__(self):
         if self.max_token_len is None:
-            object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
+            object.__setattr__(self, "max_token_len", 300 if self.pi05 else 48)
         if self.discrete_state_input is None:
             object.__setattr__(self, "discrete_state_input", self.pi05)
 
